@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build iOS App
 on: workflow_dispatch
 
 jobs:
@@ -21,20 +21,14 @@ jobs:
       - name: Install Flet
         run: pip install flet
 
-      - name: Create iOS Build
-        # Added --no-codesign to ensure it doesn't wait for a Mac password
-        run: flet build ipa --no-codesign
+      - name: Build App
+        # We build for simulator to avoid the $99 Apple fee requirement
+        run: flet build ios-simulator
 
-      - name: List files (Troubleshooting)
-        run: find build -maxdepth 4
-
-      - name: Upload Finished App
+      - name: Upload Everything Found
         uses: actions/upload-artifact@v4
         with:
           name: Precodeit-Flet-App
-          path: |
-            build/ipa/*.ipa
-            build/ios/ipa/*.ipa
-            build/ios/archive/*.xcarchive
-            build/ios/iphoneos/*.app
+          # This '**' means "search all subfolders"
+          path: build/**/*.app
           if-no-files-found: error
