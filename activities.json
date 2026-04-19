@@ -1,0 +1,68 @@
+{
+  "activity_1": {
+    "name": "טניס אילת",
+    "location": "אילת",
+    "address": "דרך יותם 8",
+    "map_url": "https://maps.google.com/?q=מרכז+הטניס+אילת+דרך+יותם+8",
+    "price": 50,
+    "people_range": [4],
+    "color": "#ADFF2F",
+    "image_url": "https://media.easy.co.il/images/UserThumbs/24925006_1525244823753.jpg",
+    "desc": "מגרשי טניס מקצועיים בלב אילת. בואו ליהנות מחווית טניס איכותית עם תאורת לילה, ציוד להשכרה ואווירה ספורטיבית."
+  },
+  "activity_2": {
+    "name": "ים אילת",
+    "location": "אילת",
+    "address": "חופי אילת",
+    "map_url": "https://maps.google.com/?q=חופי+אילת",
+    "price": 0,
+    "people_range": [1, 2, 4, 6, 12],
+    "color": "#00BFFF",
+    "image_url": "https://www.gocamping.co.il/wp-content/uploads/2022/01/%D7%A7%D7%9E%D7%A4%D7%99%D7%A0%D7%92-%D7%97%D7%95%D7%A3-%D7%94%D7%A0%D7%A1%D7%99%D7%9B%D7%94.jpg",
+    "desc": "בילוי חופשי בחופי הים האדום. מים צלולים, שמש נעימה וגישה חופשית לכל המשפחה."
+  },
+  "activity_3": {
+    "name": "פעילויות ים (חוף קיסוסקי)",
+    "location": "אילת",
+    "address": "דרך פעמי השלום 1",
+    "map_url": "https://maps.google.com/?q=חוף+קיסוסקי+אילת",
+    "price": 80,
+    "people_range": [3, 4, 6],
+    "color": "#00CED1",
+    "image_url": "https://images.unsplash.com/photo-1517176118179-65244903d13c?w=300&q=80",
+    "desc": "השכרה של סאפים, סירות, אופנועי ים, אבובים ועוד. אטרקציית הספורט הימי המובילה באילת."
+  },
+  "activity_4": {
+    "name": "טופ 94",
+    "location": "אילת",
+    "address": "השרברב 1, שחורת",
+    "map_url": "https://maps.google.com/?q=קארטינג+אילת+טופ+94",
+    "price": 80,
+    "people_range": [1, 2, 4, 6, 12],
+    "color": "#FF4500",
+    "image_url": "https://tmuracdn.blob.core.windows.net/club/meshek/mall_product_images/product/ite11689_1.png",
+    "desc": "פארק אתגרים טופ 94, קארטינג, קירות טיפוס, פיינטבול ועוד שלל פעילויות אקסטרים במתחם ממוזג וענק."
+  },
+  "activity_5": {
+    "name": "באולינג אילת",
+    "location": "אילת",
+    "address": "המלאכה 12",
+    "map_url": "https://maps.google.com/?q=באולינג+אילת+המלאכה+12",
+    "price": 39,
+    "people_range": [1, 2, 4, 6, 12],
+    "color": "#FFD700",
+    "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQj6j0MNWuG6zPozqD3Bzz9dsO8BUvVf-5R7g&s",
+    "desc": "מתחם באולינג ממוזג ומהנה עם מסלולים חדישים, בר משקאות ואוכל מהיר לכל המשפחה."
+  },
+  "activity_6": {
+    "name": "סנוקר אילת",
+    "location": "אילת",
+    "address": "המלאכה 12",
+    "map_url": "https://maps.google.com/?q=באולינג+אילת+המלאכה+12",
+    "price": 50,
+    "people_range": [1, 2, 4, 6],
+    "color": "#2e7d32",
+    "image_url": "https://websites.veritivnet.com/images/Storage/Providers_Images/39/1920x1920_adbc1e4f-d101-4893-9c76-30dd8910e8b3.jpg",
+    "desc": "שולחנות סנוקר מקצועיים וביליארד במתחם הבאולינג. אווירה מעולה ומוזיקה טובה."
+  }
+}
