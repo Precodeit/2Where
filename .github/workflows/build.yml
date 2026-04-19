@@ -21,14 +21,14 @@ jobs:
       - name: Install Flet
         run: pip install flet
 
-      - name: Build for Real Device
-        # This creates the ARM64 version for real iPhones
+      - name: Build for Real iPhone (ARM64)
+        # 'ipa' targets real devices. '--no-codesign' skips the Apple Dev ID check on the Mac.
         run: flet build ipa --no-codesign
 
-      - name: Upload Real App Folder
+      - name: Upload iPhone App
         uses: actions/upload-artifact@v4
         with:
-          name: Precodeit-Real-App
-          # This path specifically targets the Real Device products
-          path: build/flutter/ios/Runner.xcarchive/Products/Applications/*.app
+          name: Precodeit-iPhone-App
+          # This specifically searches for the ARM64 .app bundle inside the generated archive
+          path: build/**/*.xcarchive/Products/Applications/*.app
           if-no-files-found: error
