@@ -8,29 +8,22 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # This step now installs exactly what is in your requirements.txt
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
-      # Standard build command for Flet 0.80.5
+      # The "yes |" automatically presses "y" and Enter when Flet asks to install its Flutter SDK
       - name: Build for Real iPhone
-        run: flet build ipa
+        run: yes | flet build ipa
 
       - name: Upload iPhone App
         uses: actions/upload-artifact@v4
         with:
           name: Precodeit-iPhone-App
-          # This catch-all grabs every mobile bundle created anywhere in the build folder
           path: |
             build/**/*.ipa
             build/**/*.app
