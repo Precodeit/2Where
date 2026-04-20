@@ -5,27 +5,35 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
+      # THE FIX: We checkout the code into a specifically named folder 'twowhere'
+      # This bypasses the Dart "starts with a number" error completely.
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          path: twowhere
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
+      # We must specify the working-directory because your code is now in the 'twowhere' folder
       - name: Install Dependencies
+        working-directory: ./twowhere
         run: pip install -r requirements.txt
 
-      # The "yes |" automatically presses "y" and Enter when Flet asks to install its Flutter SDK
+      # 'yes |' handles the Flutter installation prompt for Flet 0.80.5
       - name: Build for Real iPhone
+        working-directory: ./twowhere
         run: yes | flet build ipa
 
+      # Upload the finished files from the new folder path
       - name: Upload iPhone App
         uses: actions/upload-artifact@v4
         with:
           name: Precodeit-iPhone-App
           path: |
-            build/**/*.ipa
-            build/**/*.app
-            build/**/*.xcarchive
+            twowhere/build/**/*.ipa
+            twowhere/build/**/*.app
+            twowhere/build/**/*.xcarchive
           if-no-files-found: error
