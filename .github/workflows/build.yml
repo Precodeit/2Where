@@ -18,12 +18,13 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Flet
-        run: pip install flet
+      # This step now installs exactly what is in your requirements.txt
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
 
-      # This is the line that was updated to fix the naming error
+      # Standard build command for Flet 0.80.5
       - name: Build for Real iPhone
-        run: flet build ipa --project-name twowhere --app-name "2Where"
+        run: flet build ipa
 
       - name: Upload iPhone App
         uses: actions/upload-artifact@v4
