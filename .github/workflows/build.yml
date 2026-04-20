@@ -21,8 +21,9 @@ jobs:
       - name: Install Flet
         run: pip install flet
 
+      # This is the line that was updated to fix the naming error
       - name: Build for Real iPhone
-        run: flet build ipa
+        run: flet build ipa --project-name twowhere --app-name "2Where"
 
       - name: Upload iPhone App
         uses: actions/upload-artifact@v4
