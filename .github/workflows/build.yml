@@ -13,13 +13,21 @@ jobs:
         with:
           python-version: '3.11'
 
-      # 1. Install the absolute latest Flet. This destroys the Swift/Xcode error.
+      # 1. Install the absolute latest Flet and Supabase on the Mac runner
       - name: Install Dependencies
-        run: pip install flet --upgrade
+        run: |
+          pip install flet --upgrade
+          pip install supabase
 
-      # 2. --yes bypasses any installation prompts
-      # 3. --project twowhere completely avoids the Dart "starts with a number" error
-      # 4. --info-plist forces the iPhone Home Screen to display "2Where"
+      # 2. AUTO-BUNDLE FIX: Create requirements.txt on the fly so the phone gets the packages!
+      - name: Bundle Python Packages
+        run: |
+          echo "flet" > requirements.txt
+          echo "supabase" >> requirements.txt
+
+      # 3. --yes bypasses any installation prompts
+      # 4. --project twowhere completely avoids the Dart "starts with a number" error
+      # 5. --info-plist forces the iPhone Home Screen to display "2Where"
       - name: Build for Real iPhone
         run: flet build ipa --yes --project twowhere --info-plist CFBundleDisplayName=2Where
 
