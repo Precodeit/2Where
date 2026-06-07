@@ -4,7 +4,7 @@ import os
 import base64
 import warnings
 import urllib.parse
-from supabase import create_client, Client
+from supabase import create_client, Client, create_async_client
 
 # העלמת אזהרות ה-Deprecation
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -17,6 +17,7 @@ class AppBackend:
         # --------------------------------------------------
         
         try:
+            # לקוח סינכרוני רגיל לפעולות ה-CRUD היומיומיות
             self.supabase: Client = create_client(self.url, self.key)
         except Exception as e:
             print(f"Supabase Init Error: {e}")
@@ -307,36 +308,42 @@ def main(page: ft.Page):
         expand=True
     )
 
-    # --- מנגנון Realtime להאזנה לשינויים ב-DB ---
-    def setup_realtime():
+    # --- מנגנון Realtime עדכני ועובד (אסינכרוני במשימות רקע) ---
+    async def setup_realtime():
         if not backend.user_session["id"]:
             return
             
-        if backend.realtime_channel:
-            try:
-                backend.supabase.remove_channel(backend.realtime_channel)
-            except Exception as ex:
-                print(f"Error removing channel: {ex}")
-
-        def on_db_change(payload):
-            # מנקים Cache כדי שהאפליקציה תמשוך מידע חדש מהשרת
-            backend.local_cache.pop("friends", None)
-            backend.local_cache.pop("events", None)
-            
-            # אם המשתמש במסך רלוונטי, נרענן לו אותו מיד ברקע
-            if backend.current_screen in ["friends", "my_events", "personal_area"]:
-                render(backend.current_screen)
-
         try:
-            # הרשמה לערוץ Realtime עבור טבלאות חברים והזמנות
-            backend.realtime_channel = (
-                backend.supabase.channel("db-realtime-updates")
-                .on_postgres_changes(event="*", schema="public", table="friendship", callback=on_db_change)
-                .on_postgres_changes(event="*", schema="public", table="event_invitations", callback=on_db_change)
-                .subscribe()
-            )
+            # יצירת לקוח אסינכרוני ייעודי לטובת ה-Realtime
+            if not hasattr(backend, 'supabase_async'):
+                backend.supabase_async = await create_async_client(backend.url, backend.key)
+
+            if backend.realtime_channel:
+                await backend.supabase_async.remove_channel(backend.realtime_channel)
+
+            def on_db_change(payload):
+                # מחיקת ה-Cache ורינדור מחדש בזמן אמת של המסך אם המשתמש נמצא בו
+                backend.local_cache.pop("friends", None)
+                backend.local_cache.pop("events", None)
+                if backend.current_screen in ["friends", "my_events", "personal_area"]:
+                    render(backend.current_screen)
+
+            # הרשמה באמצעות הלקוח האסינכרוני
+            backend.realtime_channel = backend.supabase_async.channel("db-realtime-updates")
+            backend.realtime_channel.on_postgres_changes(event="*", schema="public", table="friendship", callback=on_db_change)
+            backend.realtime_channel.on_postgres_changes(event="*", schema="public", table="event_invitations", callback=on_db_change)
+            
+            await backend.realtime_channel.subscribe()
+            
         except Exception as ex:
-            print(f"Realtime Subscription Error: {ex}")
+            print(f"Realtime Async Subscription Error: {ex}")
+
+    async def cleanup_realtime():
+        if hasattr(backend, 'supabase_async') and backend.realtime_channel:
+            try:
+                await backend.supabase_async.remove_channel(backend.realtime_channel)
+            except: pass
+            backend.realtime_channel = None
 
     def on_avatar_upload_result(e):
         try:
@@ -388,11 +395,8 @@ def main(page: ft.Page):
         def handle_menu(e):
             action = e.control.data
             if action == "logout":
-                if backend.realtime_channel:
-                    try:
-                        backend.supabase.remove_channel(backend.realtime_channel)
-                    except: pass
-                    backend.realtime_channel = None
+                # כיבוי וניקוי מנגנון ה-Realtime
+                page.run_task(cleanup_realtime)
                     
                 backend.user_session = {"name": "", "id": None, "budget": 1000, "area": "אילת", "people_count": 4, "sort_by": "default", "avatar_url": ""}
                 backend.local_cache = {}
@@ -448,11 +452,13 @@ def main(page: ft.Page):
             pass_box = ft.TextField(label="סיסמה:", password=True, can_reveal_password=True, width=350, rtl=True, bgcolor=ft.Colors.with_opacity(0.9, ft.Colors.WHITE))
             
             def handle_login(e):
-                if not id_box.value or not pass_box.value: err_txt.value = "נא להזין אימייל וסיסמה!"
+                if not id_box.value or not pass_box.value:
+                    err_txt.value = "נא להזין אימייל וסיסמה!"
                 elif backend.login(id_box.value, pass_box.value):
-                    setup_realtime()
+                    page.run_task(setup_realtime) # הרצת ה-Realtime ברקע
                     render("search_screen")
-                else: err_txt.value = "פרטי ההתחברות שגויים!"
+                else:
+                    err_txt.value = "פרטי ההתחברות שגויים!"
                 page.update()
 
             content.controls.extend([
@@ -482,7 +488,7 @@ def main(page: ft.Page):
                     err_txt.value = "נא להזין כתובת אימייל תקינה!"
                 elif backend.register(name_box.value, email_box.value, pass_box.value):
                     backend.login(email_box.value, pass_box.value)
-                    setup_realtime()
+                    page.run_task(setup_realtime) # הרצת ה-Realtime ברקע
                     page.snack_bar = ft.SnackBar(content=ft.Text("נרשמת בהצלחה!", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD), bgcolor=ft.Colors.GREEN)
                     page.snack_bar.open = True
                     render("search_screen")
@@ -541,7 +547,7 @@ def main(page: ft.Page):
                 return lambda e: (backend.handle_friend_request(target, accept), render("friends"))
 
             if pending:
-                pending_col.controls.append(ft.Text("בקשות חברות ממתינות (יופיעו כאן מיידית!):", weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_800))
+                pending_col.controls.append(ft.Text("בקשות חברות ממתינות (מתעדכן מיידית!):", weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_800))
                 for req in pending:
                     req_row = ft.Container(
                         content=ft.Row([
@@ -765,7 +771,7 @@ def main(page: ft.Page):
                                 await page.launch_url(url)
                             return open_map
 
-                        title_btn = ft.Container(content=ft.Text(item.get('short_headline', item['name']), size=16, weight=ft.FontWeight.W_800, color=ft.Colors.WHITE, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, text_align=ft.TextAlign.CENTER), on_click=make_go_to_details(item), alignment=ft.Alignment(0, 0), expand=True, ink=True, bgcolor="#343a40", border_radius=15, padding=8)
+                        title_btn = ft.Container(content=ft.Text(item.get('short_headline', item['name']), size=16, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS, text_align=ft.TextAlign.CENTER), on_click=make_go_to_details(item), alignment=ft.Alignment(0, 0), expand=True, ink=True, bgcolor="#343a40", border_radius=15, padding=8)
                         fav_btn = ft.IconButton(icon=ft.Icons.FAVORITE if is_fav else ft.Icons.FAVORITE_BORDER, icon_color=ft.Colors.RED if is_fav else ft.Colors.GREY, data=item['name'], icon_size=20)
 
                         def on_fav_click(e):
@@ -781,6 +787,7 @@ def main(page: ft.Page):
                         price_section = ft.Column(controls=[ft.Container(content=ft.Text(f"{item['price']} ₪", color="#2e7d32", size=14, weight=ft.FontWeight.BOLD), bgcolor="#99e89f", padding=6, border_radius=15), ft.Text(f"מומלץ: {rec_price} ₪", size=10, color=ft.Colors.GREY_600)], spacing=1, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
                         address_btn = ft.Container(content=ft.Text(f"📍 {item['address']}", color=ft.Colors.RED_700, size=12, weight=ft.FontWeight.BOLD), on_click=make_open_map(item), ink=True, border_radius=5, padding=2)
 
+                        # מבנה הכרטיס המפוצל 50/50
                         top_bar = ft.Row(controls=[title_btn, price_section], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER)
                         left_column = ft.Column(controls=[ft.Text(item.get('short_description', item['desc']), size=13, max_lines=3, overflow=ft.TextOverflow.ELLIPSIS), address_btn, fav_btn], expand=True, spacing=5)
                         img_box = ft.Container(content=ft.Image(src=item['image_url'], fit="cover"), height=120, expand=True, border_radius=8, clip_behavior=ft.ClipBehavior.HARD_EDGE)
