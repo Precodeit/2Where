@@ -1,43 +1,33 @@
-name: Build Real iPhone App
-on: workflow_dispatch
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Allows you to manually trigger the build from the UI
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          python-version: '3.11'
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
 
-      # 1. Install the absolute latest Flet and Supabase on the Mac runner
-      - name: Install Dependencies
-        run: |
-          pip install flet --upgrade
-          pip install supabase
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
-      # 2. AUTO-BUNDLE FIX: Create requirements.txt on the fly so the phone gets the packages!
-      - name: Bundle Python Packages
-        run: |
-          echo "flet" > requirements.txt
-          echo "supabase" >> requirements.txt
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-daemon
 
-      # 3. --yes bypasses any installation prompts
-      # 4. --project twowhere completely avoids the Dart "starts with a number" error
-      # 5. --info-plist forces the iPhone Home Screen to display "2Where"
-      - name: Build for Real iPhone
-        run: flet build ipa --yes --project twowhere --info-plist CFBundleDisplayName=2Where
-
-      - name: Upload iPhone App
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Precodeit-iPhone-App
-          # This grabs whatever Apple spits out, ensuring you get your files
-          path: |
-            build/**/*.ipa
-            build/**/*.app
-            build/**/*.xcarchive
-          if-no-files-found: error
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
