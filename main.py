@@ -2,6 +2,7 @@ import flet as ft
 import json
 import os
 import warnings
+import datetime
 import urllib.parse
 from supabase import create_client, Client, create_async_client
 
@@ -671,51 +672,186 @@ def main(page: ft.Page):
                 ])
                 return content
 
-            events_col = ft.Column(spacing=15)
+            def parse_event_dt(dt_str):
+                try:
+                    if dt_str and 'T' in str(dt_str):
+                        return datetime.datetime.strptime(dt_str, "%Y-%m-%dT%H:%M")
+                except Exception:
+                    pass
+                return None
+
+            def is_expired_ev(dt_str):
+                dt = parse_event_dt(dt_str)
+                return dt is not None and dt < datetime.datetime.now()
+
+            def format_ev_dt(dt_str):
+                dt = parse_event_dt(dt_str)
+                if dt:
+                    heb_days = ["שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת", "ראשון"]
+                    return f"יום {heb_days[dt.weekday()]}, {dt.strftime('%d/%m/%Y')}  🕐  {dt.strftime('%H:%M')}"
+                return str(dt_str) if dt_str else ""
+
+            def get_time_badge(dt_str):
+                dt = parse_event_dt(dt_str)
+                if not dt:
+                    return "", ft.Colors.GREY_600, ft.Colors.GREY_100
+                delta = dt - datetime.datetime.now()
+                secs = delta.total_seconds()
+                if secs < 0:
+                    return "✅ הסתיים", ft.Colors.GREY_600, ft.Colors.GREY_100
+                elif delta.days == 0:
+                    hrs = int(secs // 3600)
+                    if hrs == 0:
+                        return "🔥 בקרוב!", ft.Colors.WHITE, ft.Colors.RED_700
+                    return f"⏰ עוד {hrs}ש׳", ft.Colors.WHITE, ft.Colors.ORANGE_700
+                elif delta.days == 1:
+                    return "📌 מחר!", ft.Colors.WHITE, ft.Colors.ORANGE_600
+                else:
+                    return f"📅 עוד {delta.days} ימים", ft.Colors.WHITE, ft.Colors.BLUE_600
+
             my_events, my_invites = backend.get_my_events_and_invites()
-            
-            if not my_events and not my_invites:
-                events_col.controls.append(ft.Container(content=ft.Text("אין אירועים או הזמנות כרגע.", size=16), padding=20))
+            active_events = [ev for ev in my_events if not is_expired_ev(ev.get('date_time', ''))]
+            active_invites = [inv for inv in my_invites if not is_expired_ev(inv.get('date_time', ''))]
+
+            events_col = ft.Column(spacing=12)
+
+            if not active_events and not active_invites:
+                events_col.controls.append(
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Icon(ft.Icons.EVENT_BUSY, size=52, color=ft.Colors.GREY_400),
+                            ft.Text("אין אירועים פעילים כרגע.", size=16, color=ft.Colors.GREY_600, weight=ft.FontWeight.W_600),
+                            ft.Text("לך לחיפוש פעילויות וצור אירוע חדש!", size=13, color=ft.Colors.GREY_500),
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=10),
+                        padding=30, alignment=ft.Alignment(0, 0),
+                    )
+                )
             else:
-                if my_events:
-                    events_col.controls.append(ft.Text("📅 אירועים שיזמתי והקמתי:", weight=ft.FontWeight.BOLD, size=18, color=ft.Colors.BLUE_800))
-                    for ev in my_events:
-                        events_col.controls.append(
-                            ft.Container(
-                                content=ft.Column([
-                                    ft.Text(f"📍 פעילות: {ev['activity']}", weight=ft.FontWeight.BOLD, size=16),
-                                    ft.Text(f"🕒 תאריך ושעה: {ev['date_time']}", size=14, color=ft.Colors.BLUE_600),
-                                    ft.Text(f"👥 מוזמנים: {', '.join(ev['invited']) if ev['invited'] else 'אף אחד'}", size=14)
-                                ]),
-                                bgcolor=ft.Colors.BLUE_50, padding=15, border_radius=10, width=page.width
-                            )
+                if active_events:
+                    events_col.controls.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.CALENDAR_MONTH, color=PRIMARY, size=18),
+                                ft.Text("אירועים שיזמתי", weight=ft.FontWeight.W_700, size=15, color=PRIMARY),
+                            ], spacing=8),
+                            padding=ft.Padding.symmetric(vertical=4, horizontal=2),
                         )
-                if my_invites:
-                    events_col.controls.append(ft.Text("✉️ הזמנות שקיבלתי (מתעדכן בזמן אמת):", weight=ft.FontWeight.BOLD, size=18, color=ft.Colors.ORANGE_800))
-                    for inv in my_invites:
+                    )
+                    for ev in active_events:
+                        badge_label, badge_color, badge_bg = get_time_badge(ev.get('date_time', ''))
                         events_col.controls.append(
                             ft.Container(
                                 content=ft.Column([
-                                    ft.Text(f"📍 פעילות: {inv['activity']}", weight=ft.FontWeight.BOLD, size=16),
-                                    ft.Text(f"👑 מארח: {inv['host']}", size=14),
-                                    ft.Text(f"🕒 תאריך ושעה: {inv['date_time']}", size=14, color=ft.Colors.ORANGE_600),
-                                    ft.Text(f"📝 הודעה: {inv['note']}", size=14, italic=True) if inv['note'] else ft.Container()
-                                ]),
-                                bgcolor=ft.Colors.ORANGE_50, padding=15, border_radius=10, width=page.width
+                                    ft.Row([
+                                        ft.Text(ev['activity'], weight=ft.FontWeight.W_800, size=15, expand=True, color=ft.Colors.GREY_900),
+                                        ft.Container(
+                                            content=ft.Text(badge_label, size=11, color=badge_color, weight=ft.FontWeight.W_700),
+                                            bgcolor=badge_bg, border_radius=20,
+                                            padding=ft.Padding.symmetric(horizontal=10, vertical=4),
+                                        ),
+                                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Row([
+                                        ft.Icon(ft.Icons.ACCESS_TIME, size=14, color=PRIMARY),
+                                        ft.Text(format_ev_dt(ev.get('date_time', '')), size=13, color=PRIMARY),
+                                    ], spacing=5),
+                                    ft.Row([
+                                        ft.Icon(ft.Icons.PEOPLE_OUTLINE, size=14, color=ft.Colors.GREY_600),
+                                        ft.Text(
+                                            f"מוזמנים: {', '.join(ev['invited']) if ev['invited'] else 'אף אחד'}",
+                                            size=13, color=ft.Colors.GREY_700,
+                                        ),
+                                    ], spacing=5),
+                                ], spacing=8),
+                                bgcolor=ft.Colors.WHITE,
+                                border=ft.Border(
+                                    left=ft.BorderSide(1.5, ft.Colors.BLUE_100),
+                                    top=ft.BorderSide(1.5, ft.Colors.BLUE_100),
+                                    right=ft.BorderSide(1.5, ft.Colors.BLUE_100),
+                                    bottom=ft.BorderSide(1.5, ft.Colors.BLUE_100),
+                                ),
+                                border_radius=14, padding=16,
+                                shadow=ft.BoxShadow(
+                                    blur_radius=6,
+                                    color=ft.Colors.with_opacity(0.07, ft.Colors.BLACK),
+                                    offset=ft.Offset(0, 2),
+                                ),
                             )
                         )
 
-            events_main_section = ft.Container(
-                content=ft.Column([
-                    ft.Text("האירועים וההזמנות שלי", size=22, weight=ft.FontWeight.BOLD, color="#1565C0"),
-                    ft.Divider(),
-                    events_col
-                ]),
-                padding=20, border_radius=10, bgcolor=ft.Colors.with_opacity(0.95, ft.Colors.WHITE), width=page.width, margin=10
+                if active_invites:
+                    events_col.controls.append(
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.MAIL_OUTLINE, color=ACCENT, size=18),
+                                ft.Text("הזמנות שקיבלתי", weight=ft.FontWeight.W_700, size=15, color=ACCENT),
+                            ], spacing=8),
+                            padding=ft.Padding.symmetric(vertical=4, horizontal=2),
+                        )
+                    )
+                    for inv in active_invites:
+                        badge_label, badge_color, badge_bg = get_time_badge(inv.get('date_time', ''))
+                        events_col.controls.append(
+                            ft.Container(
+                                content=ft.Column([
+                                    ft.Row([
+                                        ft.Text(inv['activity'], weight=ft.FontWeight.W_800, size=15, expand=True, color=ft.Colors.GREY_900),
+                                        ft.Container(
+                                            content=ft.Text(badge_label, size=11, color=badge_color, weight=ft.FontWeight.W_700),
+                                            bgcolor=badge_bg, border_radius=20,
+                                            padding=ft.Padding.symmetric(horizontal=10, vertical=4),
+                                        ),
+                                    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                    ft.Row([
+                                        ft.Icon(ft.Icons.PERSON, size=14, color=ACCENT),
+                                        ft.Text(f"מארח: {inv['host']}", size=13, color=ACCENT),
+                                    ], spacing=5),
+                                    ft.Row([
+                                        ft.Icon(ft.Icons.ACCESS_TIME, size=14, color=ft.Colors.GREY_600),
+                                        ft.Text(format_ev_dt(inv.get('date_time', '')), size=13, color=ft.Colors.GREY_700),
+                                    ], spacing=5),
+                                    ft.Text(f"📝 {inv['note']}", size=12, color=ft.Colors.GREY_600, italic=True)
+                                    if inv.get('note') else ft.Container(height=0),
+                                ], spacing=8),
+                                bgcolor=ft.Colors.WHITE,
+                                border=ft.Border(
+                                    left=ft.BorderSide(1.5, ft.Colors.ORANGE_100),
+                                    top=ft.BorderSide(1.5, ft.Colors.ORANGE_100),
+                                    right=ft.BorderSide(1.5, ft.Colors.ORANGE_100),
+                                    bottom=ft.BorderSide(1.5, ft.Colors.ORANGE_100),
+                                ),
+                                border_radius=14, padding=16,
+                                shadow=ft.BoxShadow(
+                                    blur_radius=6,
+                                    color=ft.Colors.with_opacity(0.07, ft.Colors.BLACK),
+                                    offset=ft.Offset(0, 2),
+                                ),
+                            )
+                        )
+
+            events_header = ft.Container(
+                content=ft.Row([
+                    ft.Icon(ft.Icons.EVENT_NOTE, color=ft.Colors.WHITE, size=22),
+                    ft.Text("האירועים וההזמנות שלי", size=19, weight=ft.FontWeight.W_800, color=ft.Colors.WHITE),
+                ], spacing=10),
+                gradient=ft.LinearGradient(
+                    begin=ft.Alignment(-1, 0), end=ft.Alignment(1, 0),
+                    colors=[PRIMARY, "#1976D2"]
+                ),
+                border_radius=ft.BorderRadius(top_left=14, top_right=14, bottom_left=0, bottom_right=0),
+                padding=18,
+                margin=ft.Margin(left=10, top=10, right=10, bottom=0),
+            )
+            events_body = ft.Container(
+                content=events_col,
+                bgcolor=ft.Colors.with_opacity(0.97, ft.Colors.WHITE),
+                border_radius=ft.BorderRadius(top_left=0, top_right=0, bottom_left=14, bottom_right=14),
+                padding=16,
+                margin=ft.Margin(left=10, top=0, right=10, bottom=10),
             )
 
             content.controls.extend([
-                events_main_section,
+                events_header,
+                events_body,
                 ft.Button(content=ft.Text("➔ חזרה"), on_click=go_back, bgcolor=ft.Colors.WHITE)
             ])
 
@@ -824,50 +960,283 @@ def main(page: ft.Page):
                 page.update()
             fav_btn.on_click = on_fav_click
 
-            date_time_input = ft.TextField(label="תאריך ושעה (Date & Time)", hint_text="לדוגמה: 24/07 בשעה 18:00", rtl=True)
-            optional_text_input = ft.TextField(label="טקסט אופציונלי / הערות (Optional Text)", multiline=True, rtl=True)
-            
+            today_date = datetime.date.today()
+            max_event_date = today_date + datetime.timedelta(days=30)
+
+            event_date = {"value": None}
+            event_time = {"value": None}
+
+            date_text = ft.Text("בחר תאריך...", color=ft.Colors.GREY_500, size=13, weight=ft.FontWeight.W_500)
+            time_text = ft.Text("בחר שעה...", color=ft.Colors.GREY_500, size=13, weight=ft.FontWeight.W_500)
+
+            date_card = ft.Container(
+                content=ft.Row([
+                    ft.Container(
+                        content=ft.Icon(ft.Icons.CALENDAR_MONTH, color=ft.Colors.WHITE, size=20),
+                        bgcolor=PRIMARY, border_radius=9, padding=9,
+                    ),
+                    ft.Column([
+                        ft.Text("תאריך", size=10, color=ft.Colors.GREY_500, weight=ft.FontWeight.W_500),
+                        date_text,
+                    ], spacing=2, tight=True),
+                ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor=ft.Colors.BLUE_50,
+                border=ft.Border(
+                    left=ft.BorderSide(1.5, ft.Colors.BLUE_200),
+                    top=ft.BorderSide(1.5, ft.Colors.BLUE_200),
+                    right=ft.BorderSide(1.5, ft.Colors.BLUE_200),
+                    bottom=ft.BorderSide(1.5, ft.Colors.BLUE_200),
+                ),
+                border_radius=12, padding=12, ink=True, expand=True,
+            )
+            time_card = ft.Container(
+                content=ft.Row([
+                    ft.Container(
+                        content=ft.Icon(ft.Icons.ACCESS_TIME, color=ft.Colors.WHITE, size=20),
+                        bgcolor=ACCENT, border_radius=9, padding=9,
+                    ),
+                    ft.Column([
+                        ft.Text("שעה", size=10, color=ft.Colors.GREY_500, weight=ft.FontWeight.W_500),
+                        time_text,
+                    ], spacing=2, tight=True),
+                ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                bgcolor=ft.Colors.ORANGE_50,
+                border=ft.Border(
+                    left=ft.BorderSide(1.5, ft.Colors.ORANGE_200),
+                    top=ft.BorderSide(1.5, ft.Colors.ORANGE_200),
+                    right=ft.BorderSide(1.5, ft.Colors.ORANGE_200),
+                    bottom=ft.BorderSide(1.5, ft.Colors.ORANGE_200),
+                ),
+                border_radius=12, padding=12, ink=True, expand=True,
+            )
+
+            datetime_summary = ft.Container(visible=False, border_radius=10, padding=10)
+            popup_error = ft.Text("", color=ft.Colors.RED_700, size=12, visible=False, weight=ft.FontWeight.W_600)
+
+            def update_datetime_summary():
+                if event_date["value"] and event_time["value"]:
+                    d = event_date["value"]
+                    t = event_time["value"]
+                    heb_days = ["שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת", "ראשון"]
+                    day_name = heb_days[d.weekday()]
+                    datetime_summary.content = ft.Row([
+                        ft.Icon(ft.Icons.EVENT_AVAILABLE, color=SUCCESS, size=18),
+                        ft.Text(
+                            f"יום {day_name}, {d.strftime('%d/%m/%Y')}  ⏰  {t}",
+                            color=SUCCESS, weight=ft.FontWeight.W_700, size=13,
+                        ),
+                    ], spacing=6)
+                    datetime_summary.bgcolor = ft.Colors.GREEN_50
+                    datetime_summary.border = ft.Border(
+                        left=ft.BorderSide(1, ft.Colors.GREEN_200),
+                        top=ft.BorderSide(1, ft.Colors.GREEN_200),
+                        right=ft.BorderSide(1, ft.Colors.GREEN_200),
+                        bottom=ft.BorderSide(1, ft.Colors.GREEN_200),
+                    )
+                    datetime_summary.visible = True
+                    popup_error.visible = False
+
+            def handle_date_change(e):
+                if date_picker.value:
+                    try:
+                        selected = date_picker.value.date()
+                    except AttributeError:
+                        selected = date_picker.value
+                    event_date["value"] = selected
+                    date_text.value = selected.strftime("%d/%m/%Y")
+                    date_text.color = PRIMARY
+                    date_card.bgcolor = ft.Colors.BLUE_100
+                    date_card.border = ft.Border(
+                        left=ft.BorderSide(2, PRIMARY),
+                        top=ft.BorderSide(2, PRIMARY),
+                        right=ft.BorderSide(2, PRIMARY),
+                        bottom=ft.BorderSide(2, PRIMARY),
+                    )
+                    update_datetime_summary()
+                    page.update()
+
+            def handle_time_change(e):
+                if time_picker.value is not None:
+                    try:
+                        td = time_picker.value
+                        total_seconds = int(td.total_seconds())
+                        hours = total_seconds // 3600
+                        minutes = (total_seconds % 3600) // 60
+                    except AttributeError:
+                        hours = time_picker.value.hour
+                        minutes = time_picker.value.minute
+                    t_str = f"{hours:02d}:{minutes:02d}"
+                    event_time["value"] = t_str
+                    time_text.value = t_str
+                    time_text.color = ACCENT
+                    time_card.bgcolor = ft.Colors.ORANGE_100
+                    time_card.border = ft.Border(
+                        left=ft.BorderSide(2, ACCENT),
+                        top=ft.BorderSide(2, ACCENT),
+                        right=ft.BorderSide(2, ACCENT),
+                        bottom=ft.BorderSide(2, ACCENT),
+                    )
+                    update_datetime_summary()
+                    page.update()
+
+            date_picker = ft.DatePicker(
+                first_date=datetime.datetime(today_date.year, today_date.month, today_date.day),
+                last_date=datetime.datetime(max_event_date.year, max_event_date.month, max_event_date.day),
+                on_change=handle_date_change,
+            )
+            time_picker = ft.TimePicker(on_change=handle_time_change)
+            page.overlay[:] = [c for c in page.overlay if not isinstance(c, (ft.DatePicker, ft.TimePicker))]
+            page.overlay.extend([date_picker, time_picker])
+
+            date_card.on_click = lambda e: (setattr(date_picker, 'open', True), page.update())
+            time_card.on_click = lambda e: (setattr(time_picker, 'open', True), page.update())
+
+            optional_text_input = ft.TextField(
+                label="📝 הוסף הערה (אופציונלי)",
+                multiline=True, min_lines=2, max_lines=3, rtl=True,
+                border_color=ft.Colors.BLUE_200, border_radius=12,
+                bgcolor=ft.Colors.GREY_50, filled=True,
+            )
+
             friend_checkboxes = []
-            friends_list_ui = ft.Column(scroll="auto", height=120)
+            friends_list_ui = ft.Column(scroll="auto", height=110)
             _, my_friends = backend.get_friends_data()
-            
+
             if not my_friends:
-                friends_list_ui.controls.append(ft.Text("אין לך עדיין חברים ברשימה.", color=ft.Colors.GREY))
+                friends_list_ui.controls.append(
+                    ft.Container(
+                        content=ft.Text("עדיין אין חברים ברשימה.", color=ft.Colors.GREY_500, size=13),
+                        padding=8,
+                    )
+                )
             else:
                 for f in my_friends:
-                    cb = ft.Checkbox(label=f['name'], value=False)
+                    cb = ft.Checkbox(label=f['name'], value=False, active_color=PRIMARY)
                     friend_checkboxes.append(cb)
-                    friends_list_ui.controls.append(cb)
+                    f_avatar = ft.CircleAvatar(
+                        content=ft.Text(f['name'][0].upper(), size=11, color=ft.Colors.WHITE),
+                        bgcolor=PRIMARY_LIGHT, radius=13,
+                    )
+                    friends_list_ui.controls.append(
+                        ft.Container(
+                            content=ft.Row([f_avatar, cb], spacing=8, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                            padding=ft.Padding.symmetric(horizontal=6, vertical=3),
+                            border_radius=8,
+                        )
+                    )
 
             def submit_event(e):
-                if not date_time_input.value.strip(): return
+                popup_error.visible = False
+                if not event_date["value"]:
+                    popup_error.value = "⚠️ נא לבחור תאריך לאירוע"
+                    popup_error.visible = True
+                    page.update()
+                    return
+                if not event_time["value"]:
+                    popup_error.value = "⚠️ נא לבחור שעה לאירוע"
+                    popup_error.visible = True
+                    page.update()
+                    return
+                d = event_date["value"]
+                t = event_time["value"]
+                iso_dt = f"{d.strftime('%Y-%m-%d')}T{t}"
                 backend.create_event(
-                    item['name'],
-                    date_time_input.value.strip(),
+                    item['name'], iso_dt,
                     optional_text_input.value.strip(),
                     [cb.label for cb in friend_checkboxes if cb.value]
                 )
                 hide_popup()
+                page.snack_bar = ft.SnackBar(
+                    content=ft.Text("✅ האירוע נוצר בהצלחה!", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD),
+                    bgcolor=SUCCESS
+                )
+                page.snack_bar.open = True
                 page.update()
 
             popup_box = ft.Container(
                 content=ft.Column([
-                    ft.Text(f"יצירת אירוע – {item['name']}", size=18,
-                            weight=ft.FontWeight.W_800, color=PRIMARY),
-                    date_time_input,
+                    # ── Gradient Header ──────────────────────────────
+                    ft.Container(
+                        content=ft.Row([
+                            ft.Icon(ft.Icons.EVENT_NOTE, color=ft.Colors.WHITE, size=26),
+                            ft.Column([
+                                ft.Text("יצירת אירוע חדש", size=17, weight=ft.FontWeight.W_900, color=ft.Colors.WHITE),
+                                ft.Text(
+                                    item['name'], size=12,
+                                    color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE),
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
+                                ),
+                            ], spacing=2, tight=True, expand=True),
+                            ft.IconButton(
+                                icon=ft.Icons.CLOSE, icon_color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE),
+                                icon_size=20, on_click=hide_popup,
+                            ),
+                        ], spacing=10, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                        gradient=ft.LinearGradient(
+                            begin=ft.Alignment(-1, 0), end=ft.Alignment(1, 0),
+                            colors=[PRIMARY, "#1976D2"]
+                        ),
+                        border_radius=ft.BorderRadius(top_left=16, top_right=16, bottom_left=0, bottom_right=0),
+                        padding=18,
+                        margin=ft.Margin(left=-24, top=-24, right=-24, bottom=0),
+                    ),
+                    ft.Container(height=4),
+                    # ── Date & Time pickers ───────────────────────────
+                    ft.Column([
+                        ft.Text("📅  מתי האירוע?", size=13, color=ft.Colors.GREY_700, weight=ft.FontWeight.W_600),
+                        ft.Row([date_card, time_card], spacing=10),
+                        datetime_summary,
+                        popup_error,
+                    ], spacing=8),
+                    # ── Notes ────────────────────────────────────────
                     optional_text_input,
-                    ft.Text("הזמן חברים:", size=13, color=ft.Colors.GREY_700, weight=ft.FontWeight.W_500),
-                    ft.Container(content=friends_list_ui, bgcolor=ft.Colors.BLUE_50,
-                                 border_radius=10, padding=10),
+                    # ── Invite friends ────────────────────────────────
+                    ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.PEOPLE_OUTLINE, color=ft.Colors.GREY_700, size=18),
+                            ft.Text("הזמן חברים", size=13, color=ft.Colors.GREY_700, weight=ft.FontWeight.W_600),
+                        ], spacing=6),
+                        ft.Container(
+                            content=friends_list_ui,
+                            bgcolor=ft.Colors.GREY_50, border_radius=12, padding=10,
+                            border=ft.Border(
+                                left=ft.BorderSide(1, ft.Colors.GREY_200),
+                                top=ft.BorderSide(1, ft.Colors.GREY_200),
+                                right=ft.BorderSide(1, ft.Colors.GREY_200),
+                                bottom=ft.BorderSide(1, ft.Colors.GREY_200),
+                            ),
+                        ),
+                    ], spacing=6),
+                    # ── Action buttons ────────────────────────────────
                     ft.Row([
-                        primary_btn("ביטול", hide_popup, width=130,
-                                    bgcolor=ft.Colors.GREY_200, color=ft.Colors.GREY_800),
-                        primary_btn("צור אירוע", submit_event, width=160, bgcolor=SUCCESS)
-                    ], spacing=10)
+                        ft.Container(
+                            content=ft.Text("ביטול", size=14, color=ft.Colors.GREY_700, weight=ft.FontWeight.W_600),
+                            on_click=hide_popup, bgcolor=ft.Colors.GREY_100, border_radius=12,
+                            padding=ft.Padding.symmetric(horizontal=16, vertical=14),
+                            alignment=ft.Alignment(0, 0), expand=True, ink=True,
+                        ),
+                        ft.Container(
+                            content=ft.Row([
+                                ft.Icon(ft.Icons.ADD_CIRCLE_OUTLINE, color=ft.Colors.WHITE, size=18),
+                                ft.Text("צור אירוע", size=14, color=ft.Colors.WHITE, weight=ft.FontWeight.W_700),
+                            ], alignment=ft.MainAxisAlignment.CENTER, spacing=6),
+                            on_click=submit_event,
+                            gradient=ft.LinearGradient(
+                                begin=ft.Alignment(-1, 0), end=ft.Alignment(1, 0),
+                                colors=[SUCCESS, "#388E3C"]
+                            ),
+                            border_radius=12,
+                            padding=ft.Padding.symmetric(horizontal=16, vertical=14),
+                            alignment=ft.Alignment(0, 0), expand=True, ink=True,
+                            shadow=ft.BoxShadow(
+                                blur_radius=10, color=ft.Colors.with_opacity(0.3, SUCCESS),
+                                offset=ft.Offset(0, 3)
+                            ),
+                        ),
+                    ], spacing=10),
                 ], tight=True, spacing=12),
                 bgcolor=ft.Colors.WHITE, padding=24, border_radius=18, width=360,
-                shadow=ft.BoxShadow(blur_radius=30,
-                                    color=ft.Colors.with_opacity(0.2, ft.Colors.BLACK))
+                shadow=ft.BoxShadow(blur_radius=30, color=ft.Colors.with_opacity(0.25, ft.Colors.BLACK))
             )
 
             async def open_map(e):
